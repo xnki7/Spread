@@ -1,12 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Candle, type Interval } from "./lib/api.js";
+import { AuthProvider, useAuth } from "./lib/auth.js";
 import { useStream } from "./lib/useStream.js";
 import { Chart } from "./components/Chart.js";
 import { OrderForm } from "./components/OrderForm.js";
+import { AuthForm } from "./components/AuthForm.js";
 
 const INTERVALS: Interval[] = ["1m", "5m", "1h"];
 
 export function App() {
+  return (
+    <AuthProvider>
+      <Root />
+    </AuthProvider>
+  );
+}
+
+function Root() {
+  const { state } = useAuth();
+  if (state.status === "loading") return <div className="loading-shell">…</div>;
+  if (state.status === "anonymous") return <AuthForm />;
+  return <Trader />;
+}
+
+function Trader() {
+  const { state, logout } = useAuth();
   const [symbols, setSymbols] = useState<string[]>([]);
   const [symbol, setSymbol] = useState<string>("");
   const [interval, setInterval] = useState<Interval>("1m");
@@ -16,10 +34,12 @@ export function App() {
   const [dir, setDir] = useState<"up" | "down" | null>(null);
 
   useEffect(() => {
-    api.assets().then((s) => {
-      setSymbols(s);
-      if (s.length > 0 && !symbol) setSymbol(s[0]!);
-    }).catch(console.error);
+    api.assets()
+      .then((s) => {
+        setSymbols(s);
+        if (s.length > 0 && !symbol) setSymbol(s[0]!);
+      })
+      .catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -27,9 +47,9 @@ export function App() {
     if (!symbol) return;
     let cancelled = false;
     setCandles([]);
-    api.candles(symbol, interval).then((c) => {
-      if (!cancelled) setCandles(c);
-    }).catch(console.error);
+    api.candles(symbol, interval)
+      .then((c) => { if (!cancelled) setCandles(c); })
+      .catch(console.error);
     return () => { cancelled = true; };
   }, [symbol, interval]);
 
@@ -51,6 +71,9 @@ export function App() {
     prevPriceRef.current = next;
     setLivePrice(next);
   }, [last, symbol]);
+
+  const user = state.status === "signedIn" ? state.user : null;
+  const wallet = state.status === "signedIn" ? state.wallet : null;
 
   return (
     <div className="app">
@@ -79,6 +102,16 @@ export function App() {
           <span className={`dot ${status === "open" ? "ok" : "off"}`} />
           ws: {status}
         </span>
+
+        {user && wallet && (
+          <div className="wallet">
+            <span className="who">{user.email}</span>
+            <span className="bal">${Number(wallet.balance).toFixed(2)}</span>
+          </div>
+        )}
+        <button type="button" className="logout-btn" onClick={() => void logout()}>
+          Log out
+        </button>
       </div>
 
       <div className="chart-panel">

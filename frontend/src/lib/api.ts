@@ -1,4 +1,4 @@
-import { config } from "./config.js";
+import { apiFetch } from "./auth.js";
 
 export type Interval = "1m" | "5m" | "1h";
 
@@ -13,7 +13,7 @@ export type Candle = {
 };
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${config.apiUrl}${path}`);
+  const res = await apiFetch(path);
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
   return res.json() as Promise<T>;
 }
