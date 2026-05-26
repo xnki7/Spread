@@ -85,7 +85,32 @@ function makeAuthRepos(stores: Stores): {
 function makeApp(stores: Stores) {
   const candles: CandlesRepo = { fetch: vi.fn().mockResolvedValue([]) };
   const assets: AssetsRepo = { list: vi.fn().mockResolvedValue([]) };
-  return createApp({ candles, assets, auth: makeAuthRepos(stores) });
+  return createApp({
+    candles,
+    assets,
+    auth: makeAuthRepos(stores),
+    positions: {
+      service: {
+        open: vi.fn(),
+        close: vi.fn(),
+        closeAt: vi.fn(),
+        listOpen: vi.fn().mockResolvedValue([]),
+        listHistory: vi.fn().mockResolvedValue([]),
+      },
+      prices: {
+        set: vi.fn(),
+        get: vi.fn().mockReturnValue(null),
+        getOrFetch: vi.fn().mockResolvedValue(null),
+      },
+      engine: {
+        start: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn().mockResolvedValue(undefined),
+        onPositionOpened: vi.fn(),
+        onPositionClosed: vi.fn(),
+        broadcastSnapshot: vi.fn().mockResolvedValue(undefined),
+      },
+    },
+  });
 }
 
 function refreshCookie(res: Response): string | null {

@@ -5,27 +5,32 @@ import { startWsServer } from "./server.js";
 import { startHttpServer } from "./server_http.js";
 import { messagesReceived } from "./metrics.js";
 
-const REDIS_CHANNEL_PREFIX = "prices:";
+const CHANNEL_PREFIXES = ["prices:", "events:"];
 
 const hub = createHub();
 const sub = createRedisSubscriber();
 const wss = startWsServer(hub);
 
-sub.psubscribe(`${REDIS_CHANNEL_PREFIX}*`, (err, count) => {
-  if (err) {
-    logger.fatal({ err }, "psubscribe failed");
-    process.exit(1);
-  }
-  logger.info({ count }, "psubscribed to prices:*");
-});
+for (const prefix of CHANNEL_PREFIXES) {
+  sub.psubscribe(`${prefix}*`, (err, count) => {
+    if (err) {
+      logger.fatal({ err, prefix }, "psubscribe failed");
+      process.exit(1);
+    }
+    logger.info({ prefix, count }, "psubscribed");
+  });
+}
 
 sub.on("pmessage", (_pattern, channel, message) => {
-  const clientChannel = channel.startsWith(REDIS_CHANNEL_PREFIX)
-    ? channel.slice(REDIS_CHANNEL_PREFIX.length)
-    : channel;
+  let clientChannel = channel;
+  for (const prefix of CHANNEL_PREFIXES) {
+    if (channel.startsWith(prefix)) {
+      clientChannel = channel.slice(prefix.length);
+      break;
+    }
+  }
   const kind = clientChannel.split(":")[0] ?? "unknown";
   messagesReceived.inc({ kind });
-  // message is already a JSON string from price_poller; embed directly.
   const wrapped = `{"channel":"${clientChannel}","data":${message}}`;
   hub.broadcast(clientChannel, wrapped);
 });

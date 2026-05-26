@@ -2,6 +2,31 @@ import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { AssetsRepo, Candle, CandlesRepo } from "../src/repos.js";
 import type { SessionsRepo, UsersRepo, WalletsRepo } from "../src/auth/repos.js";
+import type { PositionsRoutesDeps } from "../src/positions/routes.js";
+
+function makePositionsDeps(): PositionsRoutesDeps {
+  return {
+    service: {
+      open: vi.fn(),
+      close: vi.fn(),
+      closeAt: vi.fn(),
+      listOpen: vi.fn().mockResolvedValue([]),
+      listHistory: vi.fn().mockResolvedValue([]),
+    },
+    prices: {
+      set: vi.fn(),
+      get: vi.fn().mockReturnValue(null),
+      getOrFetch: vi.fn().mockResolvedValue(null),
+    },
+    engine: {
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      onPositionOpened: vi.fn(),
+      onPositionClosed: vi.fn(),
+      broadcastSnapshot: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+}
 
 function makeDeps(overrides: {
   candles?: Partial<CandlesRepo>;
@@ -27,6 +52,7 @@ function makeDeps(overrides: {
         revokeAllForUser: vi.fn(),
       } as SessionsRepo,
     },
+    positions: makePositionsDeps(),
     isHealthy: overrides.isHealthy,
   };
 }
