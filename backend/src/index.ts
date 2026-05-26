@@ -4,6 +4,7 @@ import { logger } from "./logger.js";
 import { createDb } from "./db.js";
 import { createAssetsRepo, createCandlesRepo } from "./repos.js";
 import { createApp } from "./app.js";
+import { createSessionsRepo, createUsersRepo, createWalletsRepo } from "./auth/repos.js";
 
 const sql = createDb();
 let dbHealthy = false;
@@ -18,6 +19,11 @@ sql`SELECT 1`
 const app = createApp({
   candles: createCandlesRepo(sql),
   assets: createAssetsRepo(sql),
+  auth: {
+    users: createUsersRepo(sql),
+    wallets: createWalletsRepo(sql),
+    sessions: createSessionsRepo(sql),
+  },
   isHealthy: () => dbHealthy,
 });
 

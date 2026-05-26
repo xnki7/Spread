@@ -6,6 +6,8 @@ import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { registry, requestDuration, requestsTotal } from "./metrics.js";
 import type { AssetsRepo, CandlesRepo, Interval } from "./repos.js";
+import { createAuthRoutes, type AuthDeps } from "./auth/routes.js";
+import { requireAuth, type AuthContext } from "./auth/middleware.js";
 
 const CandlesQuery = z.object({
   symbol: z.string().regex(/^[A-Z0-9]+$/, "symbol must be uppercase alphanumeric"),
@@ -18,6 +20,7 @@ const CandlesQuery = z.object({
 export type Deps = {
   candles: CandlesRepo;
   assets: AssetsRepo;
+  auth: AuthDeps;
   isHealthy?: () => boolean;
 };
 
@@ -29,6 +32,7 @@ export function createApp(deps: Deps): Hono {
     cors({
       origin: config.CORS_ORIGINS,
       allowMethods: ["GET", "POST", "OPTIONS"],
+      credentials: true,
     }),
   );
 
@@ -77,6 +81,22 @@ export function createApp(deps: Deps): Hono {
       limit,
     });
     return c.json({ symbol, interval, candles });
+  });
+
+  app.route("/auth", createAuthRoutes(deps.auth));
+
+  app.get("/me", requireAuth, async (c) => {
+    const ctx = c as unknown as { var: AuthContext["Variables"] };
+    const userId = ctx.var.userId;
+    const user = await deps.auth.users.findById(userId);
+    if (!user) return c.json({ error: "user not found" }, 404);
+    const wallet = await deps.auth.wallets.findByUserId(userId);
+    return c.json({
+      user: { id: user.id, email: user.email },
+      wallet: wallet
+        ? { balance: wallet.balance, lockedMargin: wallet.locked_margin }
+        : null,
+    });
   });
 
   return app;

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { AssetsRepo, Candle, CandlesRepo } from "../src/repos.js";
+import type { SessionsRepo, UsersRepo, WalletsRepo } from "../src/auth/repos.js";
 
 function makeDeps(overrides: {
   candles?: Partial<CandlesRepo>;
@@ -16,6 +17,16 @@ function makeDeps(overrides: {
       list: vi.fn().mockResolvedValue([]),
       ...overrides.assets,
     } as AssetsRepo,
+    auth: {
+      users: { create: vi.fn(), findByEmail: vi.fn(), findById: vi.fn() } as UsersRepo,
+      wallets: { findByUserId: vi.fn() } as WalletsRepo,
+      sessions: {
+        create: vi.fn(),
+        findByHash: vi.fn(),
+        revoke: vi.fn(),
+        revokeAllForUser: vi.fn(),
+      } as SessionsRepo,
+    },
     isHealthy: overrides.isHealthy,
   };
 }
