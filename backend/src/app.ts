@@ -1,6 +1,8 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
+import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { registry, requestDuration, requestsTotal } from "./metrics.js";
 import type { AssetsRepo, CandlesRepo, Interval } from "./repos.js";
@@ -21,6 +23,14 @@ export type Deps = {
 
 export function createApp(deps: Deps): Hono {
   const app = new Hono();
+
+  app.use(
+    "*",
+    cors({
+      origin: config.CORS_ORIGINS,
+      allowMethods: ["GET", "POST", "OPTIONS"],
+    }),
+  );
 
   app.use("*", async (c, next) => {
     const endTimer = requestDuration.startTimer({ method: c.req.method });
