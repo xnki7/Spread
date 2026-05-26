@@ -1,124 +1,44 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type Candle, type Interval } from "./lib/api.js";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth.js";
-import { useStream } from "./lib/useStream.js";
-import { Chart } from "./components/Chart.js";
-import { OrderForm } from "./components/OrderForm.js";
-import { AuthForm } from "./components/AuthForm.js";
-
-const INTERVALS: Interval[] = ["1m", "5m", "1h"];
+import { Landing } from "./pages/Landing.js";
+import { Login } from "./pages/Login.js";
+import { Signup } from "./pages/Signup.js";
+import { Trader } from "./pages/Trader.js";
 
 export function App() {
   return (
-    <AuthProvider>
-      <Root />
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<PublicOnly><Landing /></PublicOnly>} />
+          <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+          <Route path="/signup" element={<PublicOnly><Signup /></PublicOnly>} />
+          <Route path="/app" element={<Private><Trader /></Private>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 
-function Root() {
-  const { state } = useAuth();
-  if (state.status === "loading") return <div className="loading-shell">…</div>;
-  if (state.status === "anonymous") return <AuthForm />;
-  return <Trader />;
-}
-
-function Trader() {
-  const { state, logout } = useAuth();
-  const [symbols, setSymbols] = useState<string[]>([]);
-  const [symbol, setSymbol] = useState<string>("");
-  const [interval, setInterval] = useState<Interval>("1m");
-  const [candles, setCandles] = useState<Candle[]>([]);
-  const [livePrice, setLivePrice] = useState<number | null>(null);
-  const prevPriceRef = useRef<number | null>(null);
-  const [dir, setDir] = useState<"up" | "down" | null>(null);
-
-  useEffect(() => {
-    api.assets()
-      .then((s) => {
-        setSymbols(s);
-        if (s.length > 0 && !symbol) setSymbol(s[0]!);
-      })
-      .catch(console.error);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!symbol) return;
-    let cancelled = false;
-    setCandles([]);
-    api.candles(symbol, interval)
-      .then((c) => { if (!cancelled) setCandles(c); })
-      .catch(console.error);
-    return () => { cancelled = true; };
-  }, [symbol, interval]);
-
-  const channels = useMemo(
-    () => (symbol ? [`trade:${symbol}`, `bookTicker:${symbol}`] : []),
-    [symbol],
-  );
-  const { status, last } = useStream(channels);
-
-  useEffect(() => {
-    if (!last || last.symbol !== symbol) return;
-    const next =
-      last.kind === "trade"
-        ? Number(last.price)
-        : (Number(last.bid) + Number(last.ask)) / 2;
-    if (!Number.isFinite(next)) return;
-    const prev = prevPriceRef.current;
-    if (prev !== null && next !== prev) setDir(next > prev ? "up" : "down");
-    prevPriceRef.current = next;
-    setLivePrice(next);
-  }, [last, symbol]);
-
-  const user = state.status === "signedIn" ? state.user : null;
-  const wallet = state.status === "signedIn" ? state.wallet : null;
-
+function LoadingScreen() {
   return (
-    <div className="app">
-      <div className="topbar">
-        <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-          {symbols.length === 0 && <option value="">(no symbols)</option>}
-          {symbols.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-
-        <select
-          value={interval}
-          onChange={(e) => setInterval(e.target.value as Interval)}
-        >
-          {INTERVALS.map((i) => (
-            <option key={i} value={i}>{i}</option>
-          ))}
-        </select>
-
-        <span className={`price ${dir ?? ""}`}>
-          {livePrice !== null ? livePrice.toFixed(4) : "—"}
-        </span>
-
-        <span className="status-line">
-          <span className={`dot ${status === "open" ? "ok" : "off"}`} />
-          ws: {status}
-        </span>
-
-        {user && wallet && (
-          <div className="wallet">
-            <span className="who">{user.email}</span>
-            <span className="bal">${Number(wallet.balance).toFixed(2)}</span>
-          </div>
-        )}
-        <button type="button" className="logout-btn" onClick={() => void logout()}>
-          Log out
-        </button>
-      </div>
-
-      <div className="chart-panel">
-        <Chart candles={candles} livePrice={livePrice} />
-      </div>
-
-      <OrderForm symbol={symbol} livePrice={livePrice} />
+    <div className="loading-shell">
+      <div className="spinner" />
     </div>
   );
+}
+
+function Private({ children }: { children: React.ReactNode }) {
+  const { state } = useAuth();
+  if (state.status === "loading") return <LoadingScreen />;
+  if (state.status === "anonymous") return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+function PublicOnly({ children }: { children: React.ReactNode }) {
+  const { state } = useAuth();
+  if (state.status === "loading") return <LoadingScreen />;
+  if (state.status === "signedIn") return <Navigate to="/app" replace />;
+  return <>{children}</>;
 }
