@@ -19,6 +19,26 @@ export type TradeEvent = {
   buyerIsMaker: boolean;
 };
 
-export type StreamEvent = BookTickerEvent | TradeEvent;
+export type PositionSnapshotItem = {
+  id: string;
+  symbol: string;
+  side: "long" | "short";
+  qty: string;
+  entryPrice: string;
+  currentPrice: string;
+  leverage: number;
+  margin: string;
+  unrealizedPnl: string;
+  openedAt: number;
+};
+
+export type PositionSnapshotEvent = {
+  kind: "position_snapshot";
+  userId: string;
+  ts: number;
+  positions: PositionSnapshotItem[];
+};
+
+export type StreamEvent = BookTickerEvent | TradeEvent | PositionSnapshotEvent;
 
 export type WsEnvelope = { channel: string; data: StreamEvent };

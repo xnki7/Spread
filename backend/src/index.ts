@@ -57,6 +57,7 @@ const app = createApp({
     prices: priceCache,
     engine,
   },
+  wallet: { sql },
   isHealthy: () => dbHealthy,
 });
 

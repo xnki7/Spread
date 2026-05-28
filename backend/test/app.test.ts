@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
+import type postgres from "postgres";
 import { createApp } from "../src/app.js";
 import type { AssetsRepo, Candle, CandlesRepo } from "../src/repos.js";
 import type { SessionsRepo, UsersRepo, WalletsRepo } from "../src/auth/repos.js";
 import type { PositionsRoutesDeps } from "../src/positions/routes.js";
+import type { WalletRoutesDeps } from "../src/wallet/routes.js";
+
+function makeWalletDeps(): WalletRoutesDeps {
+  return { sql: vi.fn() as unknown as postgres.Sql };
+}
 
 function makePositionsDeps(): PositionsRoutesDeps {
   return {
@@ -53,6 +59,7 @@ function makeDeps(overrides: {
       } as SessionsRepo,
     },
     positions: makePositionsDeps(),
+    wallet: makeWalletDeps(),
     isHealthy: overrides.isHealthy,
   };
 }

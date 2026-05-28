@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type postgres from "postgres";
 import { createApp } from "../src/app.js";
 import type { AssetsRepo, CandlesRepo } from "../src/repos.js";
 import type {
@@ -110,6 +111,7 @@ function makeApp(stores: Stores) {
         broadcastSnapshot: vi.fn().mockResolvedValue(undefined),
       },
     },
+    wallet: { sql: vi.fn() as unknown as postgres.Sql },
   });
 }
 

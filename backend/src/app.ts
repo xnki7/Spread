@@ -9,6 +9,7 @@ import type { AssetsRepo, CandlesRepo, Interval } from "./repos.js";
 import { createAuthRoutes, type AuthDeps } from "./auth/routes.js";
 import { requireAuth, type AuthContext } from "./auth/middleware.js";
 import { createPositionsRoutes, type PositionsRoutesDeps } from "./positions/routes.js";
+import { createWalletRoutes, type WalletRoutesDeps } from "./wallet/routes.js";
 
 const CandlesQuery = z.object({
   symbol: z.string().regex(/^[A-Z0-9]+$/, "symbol must be uppercase alphanumeric"),
@@ -23,6 +24,7 @@ export type Deps = {
   assets: AssetsRepo;
   auth: AuthDeps;
   positions: PositionsRoutesDeps;
+  wallet: WalletRoutesDeps;
   isHealthy?: () => boolean;
 };
 
@@ -87,6 +89,7 @@ export function createApp(deps: Deps): Hono {
 
   app.route("/auth", createAuthRoutes(deps.auth));
   app.route("/positions", createPositionsRoutes(deps.positions));
+  app.route("/wallet", createWalletRoutes(deps.wallet));
 
   app.get("/me", requireAuth, async (c) => {
     const ctx = c as unknown as { var: AuthContext["Variables"] };
