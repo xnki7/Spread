@@ -12,11 +12,22 @@ import {
 import type { PnlEngine } from "./engine.js";
 import { ValidationError, type PositionsService } from "./service.js";
 
+const OptionalPositivePrice = z
+  .union([z.coerce.number().positive(), z.null()])
+  .optional();
+
 const OpenBody = z.object({
   symbol: z.string().regex(/^[A-Z0-9]+$/),
   side: z.enum(["long", "short"]),
   margin: z.coerce.number().positive(),
   leverage: z.coerce.number().int().min(1).max(100),
+  takeProfitPrice: OptionalPositivePrice,
+  stopLossPrice: OptionalPositivePrice,
+});
+
+const StopsBody = z.object({
+  takeProfitPrice: z.union([z.coerce.number().positive(), z.null()]),
+  stopLossPrice: z.union([z.coerce.number().positive(), z.null()]),
 });
 
 const HistoryQuery = z.object({
@@ -33,6 +44,10 @@ function readUserId(c: { var: AuthContext["Variables"] }): string {
   return c.var.userId;
 }
 
+function priceArg(v: number | null | undefined): string | null {
+  return v == null ? null : v.toFixed(8);
+}
+
 export function createPositionsRoutes(deps: PositionsRoutesDeps): Hono {
   const app = new Hono();
 
@@ -46,6 +61,8 @@ export function createPositionsRoutes(deps: PositionsRoutesDeps): Hono {
         side: body.side,
         margin: body.margin.toFixed(8),
         leverage: body.leverage,
+        takeProfitPrice: priceArg(body.takeProfitPrice),
+        stopLossPrice: priceArg(body.stopLossPrice),
       });
       deps.engine.onPositionOpened(pos);
       logger.info(
@@ -67,6 +84,26 @@ export function createPositionsRoutes(deps: PositionsRoutesDeps): Hono {
       const closed = await deps.service.close({ userId, positionId: id });
       deps.engine.onPositionClosed(closed.id, userId);
       return c.json({ position: serializeClosed(closed) });
+    } catch (err) {
+      if (err instanceof PositionNotFoundError) return c.json({ error: err.message }, 404);
+      if (err instanceof ValidationError) return c.json({ error: err.message }, 400);
+      throw err;
+    }
+  });
+
+  app.post("/:id/stops", requireAuth, zValidator("json", StopsBody), async (c) => {
+    const userId = readUserId(c as unknown as { var: AuthContext["Variables"] });
+    const id = c.req.param("id");
+    const body = c.req.valid("json");
+    try {
+      const updated = await deps.service.updateStops({
+        userId,
+        positionId: id,
+        takeProfitPrice: priceArg(body.takeProfitPrice),
+        stopLossPrice: priceArg(body.stopLossPrice),
+      });
+      deps.engine.onPositionUpdated(updated);
+      return c.json({ position: serializeOpen(updated) });
     } catch (err) {
       if (err instanceof PositionNotFoundError) return c.json({ error: err.message }, 404);
       if (err instanceof ValidationError) return c.json({ error: err.message }, 400);
@@ -109,6 +146,8 @@ function serializeOpen(p: {
   entry_price: string;
   leverage: number;
   margin: string;
+  take_profit_price: string | null;
+  stop_loss_price: string | null;
   opened_at: Date;
 }) {
   return {
@@ -119,6 +158,8 @@ function serializeOpen(p: {
     entryPrice: p.entry_price,
     leverage: p.leverage,
     margin: p.margin,
+    takeProfitPrice: p.take_profit_price,
+    stopLossPrice: p.stop_loss_price,
     openedAt: p.opened_at.getTime(),
   };
 }
@@ -134,6 +175,8 @@ function serializeClosed(p: {
   margin: string;
   realized_pnl: string;
   reason: string;
+  take_profit_price: string | null;
+  stop_loss_price: string | null;
   opened_at: Date;
   closed_at: Date;
 }) {
@@ -148,6 +191,8 @@ function serializeClosed(p: {
     margin: p.margin,
     realizedPnl: p.realized_pnl,
     reason: p.reason,
+    takeProfitPrice: p.take_profit_price,
+    stopLossPrice: p.stop_loss_price,
     openedAt: p.opened_at.getTime(),
     closedAt: p.closed_at.getTime(),
   };

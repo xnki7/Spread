@@ -28,6 +28,8 @@ export type PositionSnapshotItem = {
   currentPrice: string;
   leverage: number;
   margin: string;
+  takeProfitPrice: string | null;
+  stopLossPrice: string | null;
   unrealizedPnl: string;
   openedAt: number;
 };

@@ -104,6 +104,12 @@ export function HistoryTab({ reloadKey }: Props) {
               {p.reason === "liquidation" && (
                 <span className="badge liquidation">LIQ</span>
               )}
+              {p.reason === "take_profit" && (
+                <span className="badge take-profit">TP</span>
+              )}
+              {p.reason === "stop_loss" && (
+                <span className="badge stop-loss">SL</span>
+              )}
             </div>
             <div className="mono">{fmtPrice(p.entryPrice)}</div>
             <div className="mono">{fmtPrice(p.closePrice)}</div>

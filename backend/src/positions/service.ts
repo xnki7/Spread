@@ -21,11 +21,20 @@ export type OpenRequest = {
   side: Side;
   margin: string;
   leverage: number;
+  takeProfitPrice?: string | null;
+  stopLossPrice?: string | null;
 };
 
 export type CloseRequest = {
   userId: string;
   positionId: string;
+};
+
+export type UpdateStopsRequest = {
+  userId: string;
+  positionId: string;
+  takeProfitPrice: string | null;
+  stopLossPrice: string | null;
 };
 
 export type PositionsService = {
@@ -36,6 +45,7 @@ export type PositionsService = {
     closePrice: string,
     reason: CloseReason,
   ) => Promise<ClosedPosition>;
+  updateStops: (req: UpdateStopsRequest) => Promise<Position>;
   listOpen: (userId: string) => Promise<Position[]>;
   listHistory: (userId: string, limit: number) => Promise<ClosedPosition[]>;
 };
@@ -44,6 +54,49 @@ export type Limits = {
   minMargin: number;
   maxLeverage: number;
 };
+
+// Validate stop levels against the reference (entry) price for a given side.
+// Returns the normalized numeric strings, or null when not provided.
+function validateStops(
+  side: Side,
+  referencePrice: string,
+  takeProfit: string | null | undefined,
+  stopLoss: string | null | undefined,
+): { tp: string | null; sl: string | null } {
+  const ref = Number(referencePrice);
+  if (!Number.isFinite(ref) || ref <= 0) {
+    throw new ValidationError("invalid reference price for stops");
+  }
+  let tp: string | null = null;
+  if (takeProfit != null && takeProfit !== "") {
+    const n = Number(takeProfit);
+    if (!Number.isFinite(n) || n <= 0) {
+      throw new ValidationError("take profit must be a positive number");
+    }
+    if (side === "long" && n <= ref) {
+      throw new ValidationError("take profit must be above entry for a long");
+    }
+    if (side === "short" && n >= ref) {
+      throw new ValidationError("take profit must be below entry for a short");
+    }
+    tp = n.toFixed(8);
+  }
+  let sl: string | null = null;
+  if (stopLoss != null && stopLoss !== "") {
+    const n = Number(stopLoss);
+    if (!Number.isFinite(n) || n <= 0) {
+      throw new ValidationError("stop loss must be a positive number");
+    }
+    if (side === "long" && n >= ref) {
+      throw new ValidationError("stop loss must be below entry for a long");
+    }
+    if (side === "short" && n <= ref) {
+      throw new ValidationError("stop loss must be above entry for a short");
+    }
+    sl = n.toFixed(8);
+  }
+  return { tp, sl };
+}
 
 export function createPositionsService(
   repo: PositionsRepo,
@@ -61,6 +114,13 @@ export function createPositionsService(
     const px = await prices.getOrFetch(req.symbol);
     if (!px) throw new ValidationError(`no price available for ${req.symbol}`);
 
+    const { tp, sl } = validateStops(
+      req.side,
+      px.price,
+      req.takeProfitPrice,
+      req.stopLossPrice,
+    );
+
     const qty = qtyFromMarginLeverage(req.margin, req.leverage, px.price);
     if (Number(qty) <= 0) throw new ValidationError("computed qty is zero");
 
@@ -73,6 +133,8 @@ export function createPositionsService(
         entryPrice: px.price,
         leverage: req.leverage,
         margin: req.margin,
+        takeProfitPrice: tp,
+        stopLossPrice: sl,
       });
     } catch (err) {
       if (err instanceof InsufficientFundsError) throw err;
@@ -114,10 +176,35 @@ export function createPositionsService(
     return closed;
   }
 
+  async function updateStops(req: UpdateStopsRequest): Promise<Position> {
+    const pos = await repo.findOpen(req.positionId);
+    if (!pos || pos.user_id !== req.userId) throw new PositionNotFoundError();
+    // Validate against entry price — the DB CHECK uses entry too, so this
+    // matches and produces a friendlier error than the raw constraint trip.
+    const { tp, sl } = validateStops(
+      pos.side,
+      pos.entry_price,
+      req.takeProfitPrice,
+      req.stopLossPrice,
+    );
+    const updated = await repo.updateStops({
+      positionId: pos.id,
+      userId: pos.user_id,
+      takeProfitPrice: tp,
+      stopLossPrice: sl,
+    });
+    logger.info(
+      { userId: pos.user_id, positionId: pos.id, tp, sl },
+      "position stops updated",
+    );
+    return updated;
+  }
+
   return {
     open,
     close,
     closeAt,
+    updateStops,
     listOpen: (userId) => repo.listOpenByUser(userId),
     listHistory: (userId, limit) => repo.listHistoryByUser(userId, limit),
   };

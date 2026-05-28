@@ -1,7 +1,7 @@
 import type postgres from "postgres";
 
 export type Side = "long" | "short";
-export type CloseReason = "manual" | "liquidation";
+export type CloseReason = "manual" | "liquidation" | "take_profit" | "stop_loss";
 
 export type Position = {
   id: string;
@@ -12,6 +12,8 @@ export type Position = {
   entry_price: string;
   leverage: number;
   margin: string;
+  take_profit_price: string | null;
+  stop_loss_price: string | null;
   opened_at: Date;
 };
 
@@ -27,6 +29,8 @@ export type ClosedPosition = {
   margin: string;
   realized_pnl: string;
   reason: CloseReason;
+  take_profit_price: string | null;
+  stop_loss_price: string | null;
   opened_at: Date;
   closed_at: Date;
 };
@@ -39,6 +43,8 @@ export type OpenInput = {
   entryPrice: string;
   leverage: number;
   margin: string;
+  takeProfitPrice?: string | null;
+  stopLossPrice?: string | null;
 };
 
 export type CloseInput = {
@@ -49,18 +55,51 @@ export type CloseInput = {
   reason: CloseReason;
 };
 
+export type UpdateStopsInput = {
+  positionId: string;
+  userId: string;
+  takeProfitPrice: string | null;
+  stopLossPrice: string | null;
+};
+
 export type PositionsService = {
   open: (input: OpenInput) => Promise<Position>;
   close: (input: CloseInput) => Promise<ClosedPosition>;
+  updateStops: (input: UpdateStopsInput) => Promise<Position>;
   findOpen: (positionId: string) => Promise<Position | null>;
   listOpenByUser: (userId: string) => Promise<Position[]>;
   listAllOpen: () => Promise<Position[]>;
   listHistoryByUser: (userId: string, limit: number) => Promise<ClosedPosition[]>;
 };
 
+const OPEN_COLS = `
+  id, user_id, symbol, side, qty::text, entry_price::text,
+  leverage, margin::text,
+  take_profit_price::text, stop_loss_price::text,
+  opened_at
+`;
+
+const CLOSED_COLS = `
+  id, user_id, symbol, side, qty::text, entry_price::text,
+  close_price::text, leverage, margin::text,
+  realized_pnl::text, reason,
+  take_profit_price::text, stop_loss_price::text,
+  opened_at, closed_at
+`;
+
 export function createPositionsService(sql: postgres.Sql): PositionsService {
   return {
-    open: async ({ userId, symbol, side, qty, entryPrice, leverage, margin }) => {
+    open: async ({
+      userId,
+      symbol,
+      side,
+      qty,
+      entryPrice,
+      leverage,
+      margin,
+      takeProfitPrice,
+      stopLossPrice,
+    }) => {
       return await sql.begin(async (tx) => {
         const updated = await tx<{ ok: boolean }[]>`
           UPDATE wallets
@@ -73,14 +112,19 @@ export function createPositionsService(sql: postgres.Sql): PositionsService {
         if (updated.length === 0) {
           throw new InsufficientFundsError();
         }
+        const tp = takeProfitPrice ?? null;
+        const sl = stopLossPrice ?? null;
         const rows = await tx<Position[]>`
-          INSERT INTO positions (user_id, symbol, side, qty, entry_price, leverage, margin)
+          INSERT INTO positions (
+            user_id, symbol, side, qty, entry_price, leverage, margin,
+            take_profit_price, stop_loss_price
+          )
           VALUES (
             ${userId}, ${symbol}, ${side}::position_side,
-            ${qty}::numeric, ${entryPrice}::numeric, ${leverage}, ${margin}::numeric
+            ${qty}::numeric, ${entryPrice}::numeric, ${leverage}, ${margin}::numeric,
+            ${tp}::numeric, ${sl}::numeric
           )
-          RETURNING id, user_id, symbol, side, qty::text, entry_price::text,
-                    leverage, margin::text, opened_at
+          RETURNING ${tx.unsafe(OPEN_COLS)}
         `;
         return rows[0]!;
       });
@@ -91,8 +135,7 @@ export function createPositionsService(sql: postgres.Sql): PositionsService {
         const pos = await tx<Position[]>`
           DELETE FROM positions
           WHERE id = ${positionId} AND user_id = ${userId}
-          RETURNING id, user_id, symbol, side, qty::text, entry_price::text,
-                    leverage, margin::text, opened_at
+          RETURNING ${tx.unsafe(OPEN_COLS)}
         `;
         const p = pos[0];
         if (!p) throw new PositionNotFoundError();
@@ -110,26 +153,39 @@ export function createPositionsService(sql: postgres.Sql): PositionsService {
         const rows = await tx<ClosedPosition[]>`
           INSERT INTO position_history (
             id, user_id, symbol, side, qty, entry_price, close_price,
-            leverage, margin, realized_pnl, reason, opened_at
+            leverage, margin, realized_pnl, reason,
+            take_profit_price, stop_loss_price, opened_at
           )
           VALUES (
             ${p.id}, ${p.user_id}, ${p.symbol}, ${p.side}::position_side,
             ${p.qty}::numeric, ${p.entry_price}::numeric, ${closePrice}::numeric,
             ${p.leverage}, ${p.margin}::numeric, ${realizedPnl}::numeric,
-            ${reason}::close_reason, ${p.opened_at}
+            ${reason}::close_reason,
+            ${p.take_profit_price}::numeric, ${p.stop_loss_price}::numeric,
+            ${p.opened_at}
           )
-          RETURNING id, user_id, symbol, side, qty::text, entry_price::text,
-                    close_price::text, leverage, margin::text,
-                    realized_pnl::text, reason, opened_at, closed_at
+          RETURNING ${tx.unsafe(CLOSED_COLS)}
         `;
         return rows[0]!;
       });
     },
 
+    updateStops: async ({ positionId, userId, takeProfitPrice, stopLossPrice }) => {
+      const rows = await sql<Position[]>`
+        UPDATE positions
+        SET take_profit_price = ${takeProfitPrice}::numeric,
+            stop_loss_price   = ${stopLossPrice}::numeric
+        WHERE id = ${positionId} AND user_id = ${userId}
+        RETURNING ${sql.unsafe(OPEN_COLS)}
+      `;
+      const p = rows[0];
+      if (!p) throw new PositionNotFoundError();
+      return p;
+    },
+
     findOpen: async (positionId) => {
       const rows = await sql<Position[]>`
-        SELECT id, user_id, symbol, side, qty::text, entry_price::text,
-               leverage, margin::text, opened_at
+        SELECT ${sql.unsafe(OPEN_COLS)}
         FROM positions WHERE id = ${positionId}
       `;
       return rows[0] ?? null;
@@ -137,8 +193,7 @@ export function createPositionsService(sql: postgres.Sql): PositionsService {
 
     listOpenByUser: async (userId) => {
       return await sql<Position[]>`
-        SELECT id, user_id, symbol, side, qty::text, entry_price::text,
-               leverage, margin::text, opened_at
+        SELECT ${sql.unsafe(OPEN_COLS)}
         FROM positions
         WHERE user_id = ${userId}
         ORDER BY opened_at DESC
@@ -147,17 +202,14 @@ export function createPositionsService(sql: postgres.Sql): PositionsService {
 
     listAllOpen: async () => {
       return await sql<Position[]>`
-        SELECT id, user_id, symbol, side, qty::text, entry_price::text,
-               leverage, margin::text, opened_at
+        SELECT ${sql.unsafe(OPEN_COLS)}
         FROM positions
       `;
     },
 
     listHistoryByUser: async (userId, limit) => {
       return await sql<ClosedPosition[]>`
-        SELECT id, user_id, symbol, side, qty::text, entry_price::text,
-               close_price::text, leverage, margin::text,
-               realized_pnl::text, reason, opened_at, closed_at
+        SELECT ${sql.unsafe(CLOSED_COLS)}
         FROM position_history
         WHERE user_id = ${userId}
         ORDER BY closed_at DESC

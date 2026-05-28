@@ -1223,6 +1223,150 @@ input, select { font-family: inherit; color: inherit; }
   border: 1px solid rgba(234, 57, 67, 0.4);
   letter-spacing: 0.08em;
 }
+.badge.take-profit {
+  color: var(--green);
+  background: var(--green-soft);
+  border: 1px solid rgba(22, 199, 132, 0.4);
+  letter-spacing: 0.08em;
+}
+.badge.stop-loss {
+  color: var(--yellow-text);
+  background: var(--yellow-dim);
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  letter-spacing: 0.08em;
+}
+
+/* ============================================================
+   TP / SL — inline stop chips + editor on open positions
+   ============================================================ */
+.pos-row-wrap {
+  border-top: 1px solid var(--border);
+}
+.pos-row-wrap:first-of-type { border-top: 0; }
+.pos-row-wrap .pos-row { border-top: 0; }
+
+.pos-stops-row {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 10px;
+  flex-wrap: wrap;
+}
+.stop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.stop-chip:hover { border-color: var(--border-focus); }
+.stop-chip.active { border-color: var(--yellow); background: rgba(250, 204, 21, 0.06); }
+.stop-chip-label {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.stop-chip.tp.set .stop-chip-label { color: var(--green); }
+.stop-chip.sl.set .stop-chip-label { color: var(--yellow-text); }
+.stop-chip-value { color: var(--text-muted); }
+.stop-chip.set .stop-chip-value { color: var(--text); }
+
+.stops-editor {
+  margin: 0 16px 12px;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.stops-editor-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.stops-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.stops-editor-field input {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--text);
+  outline: none;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.stops-editor-field input:focus { border-color: var(--yellow); }
+.stops-editor-error {
+  font-size: 12px;
+  color: var(--red);
+  background: var(--red-soft);
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(234, 57, 67, 0.25);
+}
+.stops-editor-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.stops-editor-actions .submit {
+  padding: 7px 14px;
+  font-size: 12px;
+  width: auto;
+}
+
+/* OrderForm — collapsible advanced section */
+.advanced-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-top: 1px dashed var(--border);
+  padding: 12px 0 10px;
+  margin: 4px 0 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: color 120ms ease;
+}
+.advanced-toggle:hover { color: var(--text); }
+.advanced-summary {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.advanced-summary .up { color: var(--green); }
+.advanced-summary .down { color: var(--yellow-text); }
+.advanced-stops {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 4px;
+}
+.hint.up { color: var(--green); }
+.hint.down { color: var(--red); }
 
 /* ============================================================
    Wallet tab
